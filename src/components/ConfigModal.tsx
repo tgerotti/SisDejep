@@ -244,7 +244,7 @@ export const ConfigModal: React.FC<ConfigModalProps> = ({
                 />
                 <input
                   type="text"
-                  placeholder="Horário (Ex: 06:00 - 14:00)"
+                  placeholder="Horário (Ex: 07:00 - 19:00)"
                   value={novoTurno.horarioPadrao}
                   onChange={e => setNovoTurno({ ...novoTurno, horarioPadrao: e.target.value })}
                   className="bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-200 font-mono"

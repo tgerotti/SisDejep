@@ -102,7 +102,7 @@ export async function importarChefiaExcel(
       if (!dataRaw) continue;
 
       const dataFormatada = normalizarDataParaYmd(dataRaw, mesAnoPadrao);
-      const horario = row['Horario'] || row['Horário'] || row['HORARIO'] || turnoEncontrado?.horarioPadrao || '06:00 - 14:00';
+      const horario = row['Horario'] || row['Horário'] || row['HORARIO'] || turnoEncontrado?.horarioPadrao || '07:00 - 19:00';
       const setor = row['Setor_Posto'] || row['Setor / Posto'] || row['Setor'] || row['Posto'] || 'Reforço Geral';
       const vagasSolicitadas = parseInt(row['Vagas_Solicitadas'] || row['Vagas Solicitadas'] || row['Vagas'] || 1, 10) || 1;
       const prioridadeRaw = String(row['Prioridade'] || 'normal').toLowerCase();
@@ -166,7 +166,7 @@ export async function importarPoliciaisExcel(
 
     const re = row['RE / Matrícula'] || row['RE'] || row['Matrícula'] || `RE ${Math.floor(100000 + Math.random() * 900000)}`;
     const cargo = row['Cargo / Posto'] || row['Cargo'] || 'Policial Penal - Classe II';
-    const turnoOrigem = row['Turno de Origem'] || row['Turno'] || 'Turno 1 (Alfa)';
+    const turnoOrigem = row['Turno de Origem'] || row['Turno'] || 'Turno I (Diurno)';
     const ordemRaw = parseInt(row['Ordem de Escolha'] || row['Ordem'] || ordemAuto, 10);
     const ordemEscolha = isNaN(ordemRaw) ? ordemAuto : ordemRaw;
     ordemAuto++;

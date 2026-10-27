@@ -7,6 +7,256 @@ export interface ResultadoDistribuicao {
   estatisticas: EstatisticasDistribuicao;
 }
 
+export type TurnoCanônico = 'I' | 'II' | 'III' | 'IV' | 'DIARISTA';
+
+/**
+ * Identifica o turno canônico a partir de qualquer string, código ou ID
+ */
+export function identificarTurnoCanonico(turnoStrOrId: string): TurnoCanônico | null {
+  if (!turnoStrOrId) return null;
+  const s = turnoStrOrId.toString().trim().toLowerCase();
+
+  // Diaristas (07h às 16h seg-sex)
+  if (
+    s.includes('diar') || 
+    s.includes('adm') || 
+    s === 'dia' ||
+    s.includes('comercial') ||
+    s.includes('escolta')
+  ) {
+    return 'DIARISTA';
+  }
+
+  // Turno III (Diurno 07h às 19h) - testar antes de I e II
+  if (
+    s === 't3' || 
+    s === 'iii' || 
+    s.includes('turno iii') || 
+    s.includes('turno 3') || 
+    s.includes('charlie') || 
+    s === '3'
+  ) {
+    return 'III';
+  }
+
+  // Turno IV ou VI (Noturno 19h às 07h)
+  if (
+    s === 't4' || 
+    s === 'iv' || 
+    s === 'vi' || 
+    s.includes('turno iv') || 
+    s.includes('turno vi') || 
+    s.includes('turno 4') || 
+    s.includes('delta') || 
+    s === '4'
+  ) {
+    return 'IV';
+  }
+
+  // Turno II (Noturno 19h às 07h)
+  if (
+    s === 't2' || 
+    s === 'ii' || 
+    s.includes('turno ii') || 
+    s.includes('turno 2') || 
+    s.includes('bravo') || 
+    s === '2'
+  ) {
+    return 'II';
+  }
+
+  // Turno I (Diurno 07h às 19h)
+  if (
+    s === 't1' || 
+    s === 'i' || 
+    s.includes('turno i') || 
+    s.includes('turno 1') || 
+    s.includes('alfa') || 
+    s === '1'
+  ) {
+    return 'I';
+  }
+
+  return null;
+}
+
+export function formatarTurnoNome(canonico: TurnoCanônico | null): string {
+  switch (canonico) {
+    case 'I': return 'Turno I (07h às 19h - Diurno)';
+    case 'II': return 'Turno II (19h às 07h - Noturno)';
+    case 'III': return 'Turno III (07h às 19h - Diurno)';
+    case 'IV': return 'Turno IV (19h às 07h - Noturno)';
+    case 'DIARISTA': return 'Diaristas (07h às 16h - Seg a Sex)';
+    default: return 'Turno Não Identificado';
+  }
+}
+
+export interface ValidacaoCompatibilidade {
+  permitido: boolean;
+  motivo?: string;
+  diaSemanaNome?: string;
+  diaSemanaNum?: number;
+}
+
+/**
+ * Validação rigorosa das Regras de Turno para DEJEP:
+ * - Turno I e III são diurnos (07h às 19h)
+ * - Turno II e IV são noturnos (19h às 07h)
+ * - Diaristas são diurnos de segunda a sexta no horário comercial (07h às 16h)
+ *
+ * Compatibilidade:
+ * - Policial Turno I: pode fazer nos turnos II, III e IV (não no Turno I)
+ * - Policial Turno II: pode fazer nos turnos I, III e IV (não no Turno II)
+ * - Policial Turno III: pode fazer nos turnos I, II e IV (não no Turno III)
+ * - Policial Turno IV: pode fazer nos turnos I, II e III (não no Turno IV)
+ * - Policial Diarista: pode fazer nos turnos I, II, III e IV, sendo:
+ *     - Nos Turnos II e IV (noturnos): APENAS sexta e sábado
+ *     - Nos Turnos I e III (diurnos): APENAS sábado e domingo
+ */
+export function validarCompatibilidadeTurnoDejep(
+  policialTurnoStr: string,
+  vagaTurnoStrOrId: string,
+  vagaData: string
+): ValidacaoCompatibilidade {
+  const turnoPolicial = identificarTurnoCanonico(policialTurnoStr);
+  const turnoVaga = identificarTurnoCanonico(vagaTurnoStrOrId);
+
+  // Parse dia da semana (0 = Domingo, 1 = Segunda, ..., 5 = Sexta, 6 = Sábado)
+  let diaSemana = 0;
+  let diaSemanaNome = '';
+  const diasNomes = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
+
+  if (vagaData) {
+    const partes = vagaData.split('-').map(Number);
+    if (partes.length === 3) {
+      const dataObj = new Date(partes[0], partes[1] - 1, partes[2]);
+      diaSemana = dataObj.getDay();
+      diaSemanaNome = diasNomes[diaSemana] || '';
+    }
+  }
+
+  // Se não foi possível mapear canonicamente, compara texto puro
+  if (!turnoPolicial || !turnoVaga) {
+    if (policialTurnoStr && vagaTurnoStrOrId && policialTurnoStr.toLowerCase() === vagaTurnoStrOrId.toLowerCase()) {
+      return {
+        permitido: false,
+        motivo: `Policial não pode fazer DEJEP no seu próprio turno de trabalho (${policialTurnoStr}).`,
+        diaSemanaNome,
+        diaSemanaNum: diaSemana
+      };
+    }
+    return { permitido: true, diaSemanaNome, diaSemanaNum: diaSemana };
+  }
+
+  // 1. Proibição Universal: Policial NUNCA faz DEJEP no seu próprio turno de trabalho
+  if (turnoPolicial === turnoVaga) {
+    return {
+      permitido: false,
+      motivo: `Policial do ${formatarTurnoNome(turnoPolicial)} não pode atuar em DEJEP no seu próprio turno (${formatarTurnoNome(turnoVaga)}).`,
+      diaSemanaNome,
+      diaSemanaNum: diaSemana
+    };
+  }
+
+  // 2. Não existe DEJEP na escala de Diarista (DEJEP é restrita aos plantões operacionais I, II, III e IV)
+  if (turnoVaga === 'DIARISTA') {
+    return {
+      permitido: false,
+      motivo: `DEJEP é restrita aos plantões operacionais de segurança (Turnos I, II, III e IV).`,
+      diaSemanaNome,
+      diaSemanaNum: diaSemana
+    };
+  }
+
+  // 3. Regra dos DIARISTAS:
+  // "O Policial que trabalha no turno diarista pode fazer DEJEP nos turnos I, II, III e IV, 
+  //  nos Turnos II e IV, nos dias da semana sexta e sábado, 
+  //  nos Turnos I e III, nos dias da semana sábado e domingo"
+  if (turnoPolicial === 'DIARISTA') {
+    // Turnos II e IV (Noturnos - 19h às 07h): apenas Sexta (5) e Sábado (6)
+    if (turnoVaga === 'II' || turnoVaga === 'IV') {
+      const diaPermitido = (diaSemana === 5 || diaSemana === 6);
+      if (!diaPermitido) {
+        return {
+          permitido: false,
+          diaSemanaNome,
+          diaSemanaNum: diaSemana,
+          motivo: `Diaristas só podem realizar DEJEP noturna (Turnos II e IV) às sextas-feiras e sábados (${vagaData} é ${diaSemanaNome}).`
+        };
+      }
+      return { permitido: true, diaSemanaNome, diaSemanaNum: diaSemana };
+    }
+
+    // Turnos I e III (Diurnos - 07h às 19h): apenas Sábado (6) e Domingo (0)
+    if (turnoVaga === 'I' || turnoVaga === 'III') {
+      const diaPermitido = (diaSemana === 6 || diaSemana === 0);
+      if (!diaPermitido) {
+        return {
+          permitido: false,
+          diaSemanaNome,
+          diaSemanaNum: diaSemana,
+          motivo: `Diaristas só podem realizar DEJEP diurna (Turnos I e III) aos sábados e domingos (${vagaData} é ${diaSemanaNome}).`
+        };
+      }
+      return { permitido: true, diaSemanaNome, diaSemanaNum: diaSemana };
+    }
+  }
+
+  // 4. Policial do Turno I: pode fazer DEJEP nos turnos II, III e IV
+  if (turnoPolicial === 'I') {
+    if (['II', 'III', 'IV'].includes(turnoVaga)) {
+      return { permitido: true, diaSemanaNome, diaSemanaNum: diaSemana };
+    }
+    return {
+      permitido: false,
+      diaSemanaNome,
+      diaSemanaNum: diaSemana,
+      motivo: `Policial do Turno I só pode fazer DEJEP nos Turnos II, III e IV.`
+    };
+  }
+
+  // 5. Policial do Turno II: pode fazer DEJEP nos turnos I, III e IV
+  if (turnoPolicial === 'II') {
+    if (['I', 'III', 'IV'].includes(turnoVaga)) {
+      return { permitido: true, diaSemanaNome, diaSemanaNum: diaSemana };
+    }
+    return {
+      permitido: false,
+      diaSemanaNome,
+      diaSemanaNum: diaSemana,
+      motivo: `Policial do Turno II só pode fazer DEJEP nos Turnos I, III e IV.`
+    };
+  }
+
+  // 6. Policial do Turno III: pode fazer DEJEP nos turnos I, II e IV
+  if (turnoPolicial === 'III') {
+    if (['I', 'II', 'IV'].includes(turnoVaga)) {
+      return { permitido: true, diaSemanaNome, diaSemanaNum: diaSemana };
+    }
+    return {
+      permitido: false,
+      diaSemanaNome,
+      diaSemanaNum: diaSemana,
+      motivo: `Policial do Turno III só pode fazer DEJEP nos Turnos I, II e IV.`
+    };
+  }
+
+  // 7. Policial do Turno IV: pode fazer DEJEP nos turnos I, II e III
+  if (turnoPolicial === 'IV') {
+    if (['I', 'II', 'III'].includes(turnoVaga)) {
+      return { permitido: true, diaSemanaNome, diaSemanaNum: diaSemana };
+    }
+    return {
+      permitido: false,
+      diaSemanaNome,
+      diaSemanaNum: diaSemana,
+      motivo: `Policial do Turno IV só pode fazer DEJEP nos Turnos I, II e III.`
+    };
+  }
+
+  return { permitido: true, diaSemanaNome, diaSemanaNum: diaSemana };
+}
+
 /**
  * Valida se a lista de datas do policial cumpre a exigência de 5 a 10 datas
  */
@@ -33,6 +283,12 @@ export function validarDatasPolicial(datas: string[], min = 5, max = 10): { vali
  * - Processa em rodadas sucessivas (Rodada 1: 1ª vaga de cada um, Rodada 2: 2ª vaga, etc.)
  * - Policial só pode ser alocado em data que ele próprio disponibilizou (entre as 5 a 10 datas)
  * - Proibida dupla alocação no mesmo dia para o mesmo servidor
+ * - Respeita as Regras Estritas de Turno:
+ *     - Policial Turno I -> vagas nos Turnos II, III e IV
+ *     - Policial Turno II -> vagas nos Turnos I, III e IV
+ *     - Policial Turno III -> vagas nos Turnos I, II e IV
+ *     - Policial Turno IV -> vagas nos Turnos I, II e III
+ *     - Policial Diarista -> vagas nos Turnos II e IV (sextas e sábados) ou I e III (sábados e domingos)
  * - Respeita o teto mensal por policial (default 8 diárias) e a quantidade de vagas da Chefia
  */
 export function executarDistribuicaoRegra01(
@@ -70,7 +326,7 @@ export function executarDistribuicaoRegra01(
   const mapaTurnos = new Map<string, string>();
   turnos.forEach(t => mapaTurnos.set(t.id, t.nome));
 
-  // Loop de Rodadas
+  // Loop de Rodadas Sucessivas
   while (houveAlocacaoNaRodada && rodada <= limiteMaximoPadrao) {
     houveAlocacaoNaRodada = false;
 
@@ -95,15 +351,32 @@ export function executarDistribuicaoRegra01(
         continue;
       }
 
-      // Encontra vagas da chefia nessas datas candidatas que ainda têm vagas abertas
-      // Prioridade: Vagas com menos alocados ou datas mais próximas, evitando conflitos
-      const vagasDisponiveis = vagas.filter(v => {
+      // Encontra vagas abertas da chefia nessas datas que atendem às regras estritas de turno
+      const vagasCompativeis = vagas.filter(v => {
         if (!datasCandidatas.includes(v.data)) return false;
-        return v.alocados.length < v.vagasSolicitadas;
+        if (v.alocados.length >= v.vagasSolicitadas) return false;
+
+        // Validação das Regras Estritas de Turno e Dias da Semana
+        const checagem = validarCompatibilidadeTurnoDejep(policial.turnoOrigem, v.turnoId, v.data);
+        return checagem.permitido;
       });
 
-      if (vagasDisponiveis.length === 0) {
-        // Nenhuma vaga aberta nas datas disponibilizadas pelo servidor nesta rodada
+      if (vagasCompativeis.length === 0) {
+        // Analisa se havia vagas abertas mas que foram impedidas pelas regras de turno
+        const vagasAbertasNasDatas = vagas.filter(v => 
+          datasCandidatas.includes(v.data) && v.alocados.length < v.vagasSolicitadas
+        );
+
+        let motivo = `Sem vagas abertas da Chefia coincidentes com as ${datasCandidatas.length} datas restantes do policial nesta rodada.`;
+        if (vagasAbertasNasDatas.length > 0) {
+          const primeiroBloqueio = validarCompatibilidadeTurnoDejep(
+            policial.turnoOrigem, 
+            vagasAbertasNasDatas[0].turnoId, 
+            vagasAbertasNasDatas[0].data
+          );
+          motivo = `Regra de Turno: ${primeiroBloqueio.motivo || 'incompatível entre turno de origem e vaga disponível'}`;
+        }
+
         logs.push({
           id: `log-${passo++}`,
           rodada,
@@ -113,23 +386,23 @@ export function executarDistribuicaoRegra01(
           policialNome: policial.nome,
           policialRE: policial.re,
           sucesso: false,
-          motivo: `Sem vagas abertas da Chefia coincidentes com as ${datasCandidatas.length} datas restantes do policial nesta rodada.`,
+          motivo,
           timestamp: new Date().toISOString()
         });
         continue;
       }
 
       // Critério de escolha do policial:
-      // Seleciona a vaga ideal (preferência pela primeira data cronológica ou vaga com prioridade alta)
-      vagasDisponiveis.sort((a, b) => {
+      // Prioridade: urgente primeiro, depois ordem cronológica da data
+      vagasCompativeis.sort((a, b) => {
         if (a.prioridade === 'urgente' && b.prioridade !== 'urgente') return -1;
         if (b.prioridade === 'urgente' && a.prioridade !== 'urgente') return 1;
         return a.data.localeCompare(b.data);
       });
 
-      const vagaEscolhida = vagasDisponiveis[0];
+      const vagaEscolhida = vagasCompativeis[0];
 
-      // Realiza a alocação
+      // Realiza a alocação oficial
       vagaEscolhida.alocados.push({
         policialId: policial.id,
         policialNome: policial.nome,
@@ -143,6 +416,10 @@ export function executarDistribuicaoRegra01(
       houveAlocacaoNaRodada = true;
 
       const nomeTurno = mapaTurnos.get(vagaEscolhida.turnoId) || vagaEscolhida.turnoId;
+      const partes = vagaEscolhida.data.split('-').map(Number);
+      const diaObj = new Date(partes[0], partes[1] - 1, partes[2]);
+      const diasNomes = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+      const diaSemana = diasNomes[diaObj.getDay()] || '';
 
       logs.push({
         id: `log-${passo++}`,
@@ -157,7 +434,7 @@ export function executarDistribuicaoRegra01(
         turnoNome: nomeTurno,
         setor: vagaEscolhida.setor,
         sucesso: true,
-        motivo: `Alocado com sucesso na data ${formatarDataBr(vagaEscolhida.data)} - ${nomeTurno} (${vagaEscolhida.setor})`,
+        motivo: `Alocado com sucesso: ${formatarDataBr(vagaEscolhida.data)} (${diaSemana}) no ${nomeTurno} (${vagaEscolhida.setor}) [Regra atendida: ${policial.turnoOrigem}]`,
         timestamp: new Date().toISOString()
       });
     }
@@ -200,19 +477,6 @@ export function executarDistribuicaoRegra01(
 /**
  * Regra de Rotatividade Mensal:
  * "o policial que escolher primeiro neste mês é o ultimo no próximo e assim por diante."
- * 
- * Exemplo:
- * Mês N:
- *   1º Policial A
- *   2º Policial B
- *   3º Policial C
- *   4º Policial D
- * 
- * Mês N+1:
- *   1º Policial B
- *   2º Policial C
- *   3º Policial D
- *   4º Policial A  (o 1º foi para o último lugar!)
  */
 export function rotacionarOrdemProximoMes(policiais: Policial[], limparDatas = true): Policial[] {
   if (policiais.length <= 1) return [...policiais];

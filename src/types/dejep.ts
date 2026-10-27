@@ -79,3 +79,17 @@ export interface ConfiguracaoDejep {
   maxDatasObrigatorias: number; // default 10
   turnos: TurnoConfig[];
 }
+
+export interface ListaArmazenada {
+  id: string;
+  mesAno: string; // YYYY-MM
+  titulo: string;
+  dataCriacao: string; // ISO string
+  vagas: VagaChefia[];
+  policiais: Policial[];
+  logs: DistribuicaoLog[];
+  estatisticas?: EstatisticasDistribuicao | null;
+  criadoPor?: string;
+  observacoes?: string;
+}
+

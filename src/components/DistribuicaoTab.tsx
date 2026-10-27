@@ -31,6 +31,7 @@ interface DistribuicaoTabProps {
   estatisticas: EstatisticasDistribuicao | null;
   setEstatisticas: React.Dispatch<React.SetStateAction<EstatisticasDistribuicao | null>>;
   onIrParaEscala: () => void;
+  onArmazenarEscala?: (vagasCustom?: VagaChefia[], logsCustom?: DistribuicaoLog[], statsCustom?: EstatisticasDistribuicao | null) => void;
 }
 
 export const DistribuicaoTab: React.FC<DistribuicaoTabProps> = ({
@@ -43,16 +44,19 @@ export const DistribuicaoTab: React.FC<DistribuicaoTabProps> = ({
   setLogs,
   estatisticas,
   setEstatisticas,
-  onIrParaEscala
+  onIrParaEscala,
+  onArmazenarEscala
 }) => {
   const [executando, setExecutando] = useState<boolean>(false);
   const [filtroRodada, setFiltroRodada] = useState<string>('todas');
   const [filtroStatus, setFiltroStatus] = useState<string>('todos');
   const [termoBuscaLog, setTermoBuscaLog] = useState<string>('');
+  const [salvoAutomatico, setSalvoAutomatico] = useState<boolean>(false);
 
   // Executa a Distribuição
   const handleExecutarDistribuicao = () => {
     setExecutando(true);
+    setSalvoAutomatico(false);
 
     setTimeout(() => {
       const resultado = executarDistribuicaoRegra01(
@@ -66,6 +70,12 @@ export const DistribuicaoTab: React.FC<DistribuicaoTabProps> = ({
       setLogs(resultado.logs);
       setEstatisticas(resultado.estatisticas);
       setExecutando(false);
+
+      // Armazenamento automático da lista gerada para consulta permanente
+      if (onArmazenarEscala) {
+        onArmazenarEscala(resultado.vagasAtualizadas, resultado.logs, resultado.estatisticas);
+        setSalvoAutomatico(true);
+      }
 
       // Efeito de confete ao concluir com sucesso
       try {
@@ -185,8 +195,8 @@ export const DistribuicaoTab: React.FC<DistribuicaoTabProps> = ({
           </div>
         </div>
 
-        {/* Card Informativo dos Critérios da Regra 01 */}
-        <div className="mt-4 pt-4 border-t border-slate-800 grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-slate-300">
+        {/* Card Informativo dos Critérios da Regra 01 e Regra dos Turnos */}
+        <div className="mt-4 pt-4 border-t border-slate-800 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 text-xs text-slate-300">
           <div className="bg-slate-950/70 p-3 rounded-lg border border-slate-800/80">
             <strong className="text-white block mb-1">1. Ordem de Escolha Estrita</strong>
             Cada rodada inicia pelo 1º colocado até o último. O 1º colocado tem prioridade máxima na escolha de cada rodada.
@@ -199,48 +209,128 @@ export const DistribuicaoTab: React.FC<DistribuicaoTabProps> = ({
             <strong className="text-white block mb-1">3. Rodadas Sucessivas e Equitativas</strong>
             Distribuem-se 1 vaga por policial por rodada até esgotamento das vagas da chefia ou alcance do limite mensal por servidor.
           </div>
+          <div className="bg-slate-950/70 p-3 rounded-lg border border-indigo-500/30">
+            <strong className="text-indigo-300 block mb-1">4. Regra dos Turnos (Rigorosa)</strong>
+            Turnos I e III (07h-19h), Turnos II e IV (19h-07h), Diaristas (07h-16h). Incompatível no mesmo turno; Diaristas apenas sex/sáb (noturno) e sáb/dom (diurno).
+          </div>
+        </div>
+
+        {/* Quadro Detalhado das Regras de Compatibilidade dos Turnos */}
+        <div className="mt-3 p-3.5 rounded-lg bg-indigo-950/30 border border-indigo-500/20 text-xs">
+          <div className="flex items-center gap-2 mb-2">
+            <Info className="w-4 h-4 text-indigo-400" />
+            <strong className="text-indigo-200">Matriz Oficial de Compatibilidade de Turnos (DEJEP):</strong>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 text-[11px]">
+            <div className="bg-slate-950/70 p-2 rounded border border-blue-500/30">
+              <span className="text-blue-300 font-bold block">Policial Turno I</span>
+              <span className="text-slate-400">Pode fazer DEJEP nos:</span>
+              <p className="text-slate-200 font-medium mt-0.5">Turnos II, III e IV</p>
+            </div>
+            <div className="bg-slate-950/70 p-2 rounded border border-emerald-500/30">
+              <span className="text-emerald-300 font-bold block">Policial Turno II</span>
+              <span className="text-slate-400">Pode fazer DEJEP nos:</span>
+              <p className="text-slate-200 font-medium mt-0.5">Turnos I, III e IV</p>
+            </div>
+            <div className="bg-slate-950/70 p-2 rounded border border-purple-500/30">
+              <span className="text-purple-300 font-bold block">Policial Turno III</span>
+              <span className="text-slate-400">Pode fazer DEJEP nos:</span>
+              <p className="text-slate-200 font-medium mt-0.5">Turnos I, II e IV</p>
+            </div>
+            <div className="bg-slate-950/70 p-2 rounded border border-amber-500/30">
+              <span className="text-amber-300 font-bold block">Policial Turno IV</span>
+              <span className="text-slate-400">Pode fazer DEJEP nos:</span>
+              <p className="text-slate-200 font-medium mt-0.5">Turnos I, II e III</p>
+            </div>
+            <div className="bg-slate-950/70 p-2 rounded border border-rose-500/30">
+              <span className="text-rose-300 font-bold block">Policial Diaristas</span>
+              <span className="text-slate-400">Pode fazer DEJEP:</span>
+              <p className="text-slate-200 font-medium mt-0.5">
+                Turnos II e IV: <span className="text-rose-300">Sexta e Sábado</span><br/>
+                Turnos I e III: <span className="text-rose-300">Sábado e Domingo</span>
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Estatísticas da Distribuição */}
       {estatisticas && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5">
-            <span className="text-xs text-slate-400 block">Vagas Solicitadas</span>
-            <div className="text-2xl font-bold text-white mt-1">{estatisticas.totalVagasSolicitadas}</div>
-            <span className="text-[11px] text-slate-500">pela chefia</span>
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5">
+              <span className="text-xs text-slate-400 block">Vagas Solicitadas</span>
+              <div className="text-2xl font-bold text-white mt-1">{estatisticas.totalVagasSolicitadas}</div>
+              <span className="text-[11px] text-slate-500">pela chefia</span>
+            </div>
+
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5">
+              <span className="text-xs text-slate-400 block">Vagas Preenchidas</span>
+              <div className="text-2xl font-bold text-emerald-400 mt-1">{estatisticas.totalVagasPreenchidas}</div>
+              <span className="text-[11px] text-emerald-500/80">{estatisticas.taxaAtendimento}% de cobertura</span>
+            </div>
+
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5">
+              <span className="text-xs text-slate-400 block">Vagas Não Atendidas</span>
+              <div className="text-2xl font-bold text-amber-400 mt-1">{estatisticas.totalVagasNaoPreenchidas}</div>
+              <span className="text-[11px] text-amber-500/80">sem policiais disponíveis</span>
+            </div>
+
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5">
+              <span className="text-xs text-slate-400 block">Policiais Aptos</span>
+              <div className="text-2xl font-bold text-blue-400 mt-1">{estatisticas.totalPoliciaisAptos}</div>
+              <span className="text-[11px] text-blue-500/80">participando da fila</span>
+            </div>
+
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5">
+              <span className="text-xs text-slate-400 block">Policiais Contemplados</span>
+              <div className="text-2xl font-bold text-indigo-400 mt-1">{estatisticas.totalPoliciaisAtendidos}</div>
+              <span className="text-[11px] text-indigo-500/80">com ao menos 1 DEJEP</span>
+            </div>
+
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5">
+              <span className="text-xs text-slate-400 block">Rodadas Executadas</span>
+              <div className="text-2xl font-bold text-purple-400 mt-1">{estatisticas.rodadasExecutadas}</div>
+              <span className="text-[11px] text-purple-500/80">ciclos completos</span>
+            </div>
           </div>
 
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5">
-            <span className="text-xs text-slate-400 block">Vagas Preenchidas</span>
-            <div className="text-2xl font-bold text-emerald-400 mt-1">{estatisticas.totalVagasPreenchidas}</div>
-            <span className="text-[11px] text-emerald-500/80">{estatisticas.taxaAtendimento}% de cobertura</span>
-          </div>
+          {/* Banner de Armazenamento para Consulta */}
+          <div className="bg-emerald-950/60 border border-emerald-500/50 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-lg bg-emerald-500/20 text-emerald-300 mt-0.5">
+                <CheckCircle2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-emerald-200">
+                  Lista Oficial Criada e Armazenada para Consulta Permanente!
+                </h4>
+                <p className="text-xs text-emerald-300/80 mt-0.5 max-w-2xl">
+                  A escala do mês de <strong>{config.mesAnoAtual}</strong> está homologada e gravada no histórico do sistema. Ela pode ser consultada no formato calendário a qualquer momento pelos gestores e pela chefia.
+                </p>
+              </div>
+            </div>
 
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5">
-            <span className="text-xs text-slate-400 block">Vagas Não Atendidas</span>
-            <div className="text-2xl font-bold text-amber-400 mt-1">{estatisticas.totalVagasNaoPreenchidas}</div>
-            <span className="text-[11px] text-amber-500/80">sem policiais disponíveis</span>
+            <div className="flex items-center gap-2 self-end sm:self-center">
+              <button
+                onClick={onIrParaEscala}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-4 py-2 rounded-lg flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
+              >
+                <Calendar className="w-4 h-4" />
+                <span>Ver no Calendário</span>
+              </button>
+              {onArmazenarEscala && (
+                <button
+                  onClick={() => onArmazenarEscala()}
+                  className="bg-slate-900 hover:bg-slate-800 text-emerald-300 border border-emerald-600/40 text-xs font-medium px-3 py-2 rounded-lg transition-colors cursor-pointer"
+                  title="Garantir salvamento manual no histórico de consultas"
+                >
+                  Salvar Novamente
+                </button>
+              )}
+            </div>
           </div>
-
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5">
-            <span className="text-xs text-slate-400 block">Policiais Aptos</span>
-            <div className="text-2xl font-bold text-blue-400 mt-1">{estatisticas.totalPoliciaisAptos}</div>
-            <span className="text-[11px] text-blue-500/80">participando da fila</span>
-          </div>
-
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5">
-            <span className="text-xs text-slate-400 block">Policiais Contemplados</span>
-            <div className="text-2xl font-bold text-indigo-400 mt-1">{estatisticas.totalPoliciaisAtendidos}</div>
-            <span className="text-[11px] text-indigo-500/80">com ao menos 1 DEJEP</span>
-          </div>
-
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5">
-            <span className="text-xs text-slate-400 block">Rodadas Executadas</span>
-            <div className="text-2xl font-bold text-purple-400 mt-1">{estatisticas.rodadasExecutadas}</div>
-            <span className="text-[11px] text-purple-500/80">ciclos completos</span>
-          </div>
-        </div>
+        </>
       )}
 
       {/* Grade de Alocação por Servidor (Equidade e Transparência) */}

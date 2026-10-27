@@ -17,11 +17,14 @@ import {
   Info,
   CalendarDays,
   Download,
-  Upload
+  Upload,
+  LayoutGrid,
+  List
 } from 'lucide-react';
 import { Policial, TurnoConfig, ConfiguracaoDejep } from '../types/dejep';
 import { formatarDataBr, obterDiasDoMes, validarDatasPolicial, rotacionarOrdemProximoMes, reordenarPoliciais } from '../utils/dejepEngine';
 import { exportarPoliciaisExcel, baixarArquivoModelo, importarPoliciaisExcel } from '../utils/excelExport';
+import { obterEstiloTurno } from '../utils/sampleData';
 
 interface PoliciaisTabProps {
   policiais: Policial[];
@@ -42,6 +45,8 @@ export const PoliciaisTab: React.FC<PoliciaisTabProps> = ({
 }) => {
   const [termoBusca, setTermoBusca] = useState<string>('');
   const [filtroTurno, setFiltroTurno] = useState<string>('todos');
+  const [modoVisualizacao, setModoVisualizacao] = useState<'calendario' | 'tabela'>('calendario');
+  const diasDoMes = obterDiasDoMes(config.mesAnoAtual);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -82,7 +87,7 @@ export const PoliciaisTab: React.FC<PoliciaisTabProps> = ({
     nome: '',
     re: '',
     cargo: 'Policial Penal - Classe II',
-    turnoOrigem: turnos[0]?.nome || 'Turno 1 (Alfa)',
+    turnoOrigem: turnos[0]?.nome || 'Turno I (Diurno)',
     maxDejepMes: 8,
     ativo: true,
     telefone: ''
@@ -112,7 +117,7 @@ export const PoliciaisTab: React.FC<PoliciaisTabProps> = ({
       nome: '',
       re: '',
       cargo: 'Policial Penal - Classe II',
-      turnoOrigem: turnos[0]?.nome || 'Turno 1 (Alfa)',
+      turnoOrigem: turnos[0]?.nome || 'Turno I (Diurno)',
       maxDejepMes: config.limitePadraoDejep || 8,
       ativo: true,
       telefone: ''
@@ -391,11 +396,11 @@ export const PoliciaisTab: React.FC<PoliciaisTabProps> = ({
         )}
       </div>
 
-      {/* Barra de Filtros e Resumo de Conformidade */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-        <div className="flex items-center gap-3 w-full sm:w-auto">
+      {/* Barra de Filtros, Resumo de Conformidade e Seletor de Visão */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {/* Busca */}
-          <div className="relative flex-1 sm:w-80">
+          <div className="relative w-64 sm:w-72">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
@@ -417,17 +422,214 @@ export const PoliciaisTab: React.FC<PoliciaisTabProps> = ({
               <option key={t.id} value={t.nome}>{t.nome}</option>
             ))}
           </select>
+
+          {/* Alternador de Visão: Calendário (Padrão) vs Tabela */}
+          <div className="flex items-center bg-slate-950 p-1 rounded-lg border border-slate-800">
+            <button
+              onClick={() => setModoVisualizacao('calendario')}
+              className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                modoVisualizacao === 'calendario'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              <span>Visão Calendário</span>
+            </button>
+            <button
+              onClick={() => setModoVisualizacao('tabela')}
+              className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                modoVisualizacao === 'tabela'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <List className="w-3.5 h-3.5" />
+              <span>Ordem de Escolha / Lista</span>
+            </button>
+          </div>
         </div>
 
-        <div className="text-xs text-slate-400 flex items-center gap-2">
+        <div className="text-xs text-slate-400 flex flex-wrap items-center gap-2">
           <span>Total de Aptos: <strong className="text-white">{policiais.length}</strong></span>
           <span className="text-slate-600">|</span>
           <span className="text-emerald-400 font-medium">Exigência: 5 a 10 datas por policial</span>
         </div>
       </div>
 
-      {/* Tabela Oficial de Policiais */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-sm">
+      {/* Legenda de Cores por Turno */}
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-wrap items-center gap-2 text-xs">
+        <span className="text-slate-400 font-bold uppercase tracking-wider text-[11px] mr-1">
+          Cores dos Turnos de Origem:
+        </span>
+        {turnos.map(turno => {
+          const estilo = obterEstiloTurno(turno.id);
+          const count = policiais.filter(p => p.turnoOrigem.includes(turno.nome) || p.turnoOrigem.includes(turno.codigo)).length;
+          return (
+            <div
+              key={turno.id}
+              className={`px-2.5 py-1 rounded-md text-xs font-semibold border flex items-center gap-1.5 ${estilo.badge}`}
+            >
+              <span className={`w-2 h-2 rounded-full ${estilo.dot}`}></span>
+              <span>{turno.nome}</span>
+              <span className="text-[10px] opacity-75 font-mono">({count} aptos)</span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ========================================================
+          VISÃO 1: CALENDÁRIO MENSAL DE DISPONIBILIDADE (PADRÃO)
+         ======================================================== */}
+      {modoVisualizacao === 'calendario' && (
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
+          <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+            <div>
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-blue-400" />
+                Mapa Calendário de Disponibilidade dos Policiais ({config.mesAnoAtual})
+              </h3>
+              <p className="text-xs text-slate-400">
+                Cada policial penal aparece alocado nos dias ofertados com a <strong>cor do seu turno de origem</strong> e o <strong>número da sua ordem de escolha (#)</strong>.
+              </p>
+            </div>
+            <div className="text-xs text-slate-400">
+              Total de Policiais Filtrados: <strong className="text-blue-400 font-bold">{policiaisFiltrados.length}</strong>
+            </div>
+          </div>
+
+          {policiais.length === 0 ? (
+            <div className="p-14 text-center bg-slate-950/60 rounded-xl border border-slate-800">
+              <CalendarDays className="w-14 h-14 text-slate-600 mx-auto mb-3" />
+              <h4 className="text-base font-semibold text-slate-200">
+                Aguardando upload da Lista de Policiais Penais (.xlsx)
+              </h4>
+              <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+                O sistema está em branco. Importe a planilha de policiais preenchida conforme o modelo oficial para exibir a disponibilidade de cada servidor diretamente no calendário.
+              </p>
+              <div className="flex flex-wrap items-center justify-center gap-3 mt-5">
+                <button
+                  onClick={() => baixarArquivoModelo('policial')}
+                  className="bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold px-4 py-2.5 rounded-lg flex items-center gap-2 shadow-sm cursor-pointer"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Baixar Modelo (.xlsx)</span>
+                </button>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-4 py-2.5 rounded-lg flex items-center gap-2 shadow-sm cursor-pointer"
+                >
+                  <Upload className="w-4 h-4" />
+                  <span>Importar Planilha</span>
+                </button>
+                <button
+                  onClick={handleAbrirNovoPolicial}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold px-4 py-2.5 rounded-lg border border-slate-700 flex items-center gap-2 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Cadastrar Manualmente</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              {/* Cabeçalho Semanal */}
+              <div className="grid grid-cols-7 gap-2 text-center text-xs font-bold text-slate-400 uppercase tracking-wider py-1">
+                {['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'].map(d => (
+                  <div key={d} className="bg-slate-950/90 py-2 rounded-lg border border-slate-800/80">
+                    {d}
+                  </div>
+                ))}
+              </div>
+
+              {/* Grade de Dias */}
+              <div className="grid grid-cols-7 gap-2">
+                {diasDoMes.map(diaYmd => {
+                  const dataObj = new Date(diaYmd + 'T00:00:00');
+                  const diaNum = diaYmd.split('-')[2];
+                  const diaSemana = dataObj.getDay();
+                  const isFimDeSemana = diaSemana === 0 || diaSemana === 6;
+
+                  // Policiais que disponibilizaram este dia
+                  const policiaisDoDia = policiaisFiltrados
+                    .filter(p => p.datasDisponiveis.includes(diaYmd))
+                    .sort((a, b) => a.ordemEscolha - b.ordemEscolha);
+
+                  return (
+                    <div
+                      key={diaYmd}
+                      className={`min-h-[140px] p-2 rounded-xl border flex flex-col justify-between ${
+                        policiaisDoDia.length > 0
+                          ? 'bg-slate-950/90 border-slate-700'
+                          : 'bg-slate-900/40 border-slate-800/50'
+                      }`}
+                    >
+                      {/* Topo do Dia */}
+                      <div className="flex items-center justify-between mb-1">
+                        <span className={`text-xs font-bold ${isFimDeSemana ? 'text-amber-400 font-extrabold' : 'text-slate-300'}`}>
+                          {diaNum}
+                        </span>
+                        {policiaisDoDia.length > 0 && (
+                          <span className="text-[10px] bg-blue-950 text-blue-300 px-1.5 py-0.2 rounded font-bold font-mono">
+                            {policiaisDoDia.length} apto(s)
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Lista de Policiais com a cor de seu turno */}
+                      <div className="space-y-1 overflow-y-auto max-h-28 text-[10px]">
+                        {policiaisDoDia.map(policial => {
+                          const estilo = obterEstiloTurno(policial.turnoOrigem);
+
+                          return (
+                            <button
+                              key={policial.id}
+                              onClick={() => handleAbrirGerenciarDatas(policial)}
+                              className={`w-full text-left p-1 rounded border leading-tight transition-transform hover:scale-[1.02] cursor-pointer ${estilo.bg} ${estilo.border}`}
+                              title={`${policial.nome} (${policial.re}) - Ordem #${policial.ordemEscolha} - Turno: ${policial.turnoOrigem}. Clique para gerenciar datas.`}
+                            >
+                              <div className="flex items-center justify-between font-bold">
+                                <span className={`${estilo.text} flex items-center gap-1`}>
+                                  <span className={`w-1.5 h-1.5 rounded-full ${estilo.dot}`}></span>
+                                  #{policial.ordemEscolha}
+                                </span>
+                                <span className="text-slate-400 font-mono text-[9px]">{policial.re}</span>
+                              </div>
+                              <div className="font-semibold text-white truncate">
+                                {policial.nome}
+                              </div>
+                              <div className="text-[8px] text-slate-400 truncate">
+                                {policial.turnoOrigem}
+                              </div>
+                            </button>
+                          );
+                        })}
+
+                        {policiaisDoDia.length === 0 && (
+                          <div className="text-center text-slate-600 text-[10px] italic py-3">
+                            Sem servidor
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Rodapé do Dia */}
+                      <div className="text-[9px] text-slate-500 text-right mt-1">
+                        {isFimDeSemana ? 'Plantão' : 'Dia útil'}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ========================================================
+          VISÃO 2: TABELA DE ORDEM DE ESCOLHA & GESTÃO DETALHADA
+         ======================================================== */}
+      {modoVisualizacao === 'tabela' && (
+        <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm text-slate-300">
             <thead className="bg-slate-950/70 text-slate-400 text-xs uppercase tracking-wider border-b border-slate-800">
@@ -601,6 +803,7 @@ export const PoliciaisTab: React.FC<PoliciaisTabProps> = ({
           </table>
         </div>
       </div>
+      )}
 
       {/* Modal Gerenciador de Datas (Mín 5, Máx 10) */}
       {policialGerenciandoDatas && (
@@ -788,7 +991,7 @@ export const PoliciaisTab: React.FC<PoliciaisTabProps> = ({
                     {turnos.map(t => (
                       <option key={t.id} value={t.nome}>{t.nome}</option>
                     ))}
-                    <option value="Administrativo">Administrativo</option>
+                    <option value="Diaristas">Diaristas</option>
                   </select>
                 </div>
               </div>
