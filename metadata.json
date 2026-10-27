@@ -1,0 +1,8 @@
+{
+  "name": "Sistema DEJEP - Gestão e Distribuição de Escalas",
+  "description": "Sistema de gestão e distribuição de DEJEP por turnos, lista de policiais aptos com ordem de escolha e rotatividade mensal.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
